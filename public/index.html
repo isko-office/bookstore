@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <!-- Mobil cihazlarda düzgün görünmək üçün (responsive dizaynın əsası) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kitab Evi</title>
+  <!-- Şriftlər (internet olmasa sistem şriftləri istifadə olunur) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Literata:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Üst panel -->
+  <header class="topbar">
+    <a class="brand" href="index.html">Kitab Evi</a>
+    <nav>
+      <a class="btn btn-ghost" href="login.html">Giriş</a>
+      <a class="btn btn-primary" href="register.html">Qeydiyyat</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Əsas bölmə: mətn solda, kitab rəfi sağda -->
+    <section class="hero">
+      <div>
+        <h1>Kitab Evi</h1>
+        <p>Sevdiyiniz kitabları kateqoriyalar üzrə tapın. Kataloqa baxmaq üçün hesabınıza daxil olun.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="login.html">Daxil ol</a>
+          <a class="btn btn-ghost" href="register.html">Hesab yarat</a>
+        </div>
+      </div>
+
+      <!-- Dekorativ kitab rəfi (ekran oxuyucular üçün gizlədilib) -->
+      <div class="shelf" aria-hidden="true">
+        <span style="height:70%;  background:#6b2d5c"></span>
+        <span style="height:92%;  background:#17233b"></span>
+        <span style="height:58%;  background:#1f4e5f"></span>
+        <span style="height:80%;  background:#e0a526"></span>
+        <span style="height:100%; background:#8a3b2e"></span>
+        <span style="height:66%;  background:#3e5c4a"></span>
+        <span style="height:86%;  background:#4a3f6b"></span>
+      </div>
+    </section>
+
+    <!-- Üç fənnin istifadəçiyə görünən təzahürü -->
+    <section class="security" aria-labelledby="sec-title">
+      <h2 id="sec-title">Hesabınız necə qorunur</h2>
+      <ul>
+        <li><strong>Şifrələr oxunmur</strong>Şifrəniz bazada açıq yazılmır, hash şəklində saxlanılır.</li>
+        <li><strong>Bulud infrastrukturu</strong>Sayt və verilənlər bazası ayrı bulud xidmətlərində işləyir.</li>
+        <li><strong>Giriş jurnalı</strong>Giriş və qeydiyyat cəhdləri təhlükəsizlik jurnalında qeyd olunur.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>Kitab Evi &middot; Universitet layihəsi</footer>
+
+</body>
+</html>

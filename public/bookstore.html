@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kataloq | Kitab Evi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Literata:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="bookstore.html">Kitab Evi</a>
+    <nav>
+      <a class="btn btn-ghost" href="index.html">Çıxış</a>
+    </nav>
+  </header>
+
+  <main class="store">
+    <h1>Kitab kataloqu</h1>
+
+    <!-- Kateqoriya düymələri JavaScript ilə yaradılır -->
+    <div id="filters" class="filters" role="group" aria-label="Kateqoriyalar"></div>
+    <p id="count" class="count" aria-live="polite"></p>
+
+    <!-- Kitab kartları JavaScript ilə yaradılır -->
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <script>
+    /* ------------------------------------------------------------
+       Kitab siyahısı. Şəkil əlavə etmək üçün sətrə image sahəsi yazın,
+       məsələn: image: "images/clean-code.jpg" (şəkil public/images/ qovluğunda olsun).
+       image yoxdursa, rəngli qabıq göstərilir.
+       ------------------------------------------------------------ */
+    const books = [
+      { title: "Əli və Nino", author: "Qurban Səid", category: "Bədii ədəbiyyat", color: "#6b2d5c" },
+      { title: "Leyli və Məcnun", author: "Məhəmməd Füzuli", category: "Bədii ədəbiyyat", color: "#8a3b2e" },
+      { title: "1984", author: "George Orwell", category: "Bədii ədəbiyyat", color: "#2b3a55" },
+      { title: "Kitabi-Dədə Qorqud", author: "Xalq dastanı", category: "Tarix və mədəniyyət", color: "#3e5c4a" },
+      { title: "Sapiens", author: "Yuval Noah Harari", category: "Tarix və mədəniyyət", color: "#7a5b1e" },
+      { title: "Applied Cryptography", author: "Bruce Schneier", category: "Texnologiya", color: "#1f4e5f" },
+      { title: "The Pragmatic Programmer", author: "Hunt & Thomas", category: "Texnologiya", color: "#4a3f6b" },
+      { title: "Clean Code", author: "Robert C. Martin", category: "Texnologiya", color: "#2f5d3a" },
+      { title: "Kiçik Şahzadə", author: "Antuan de Sent-Ekzüperi", category: "Uşaq kitabları", color: "#a35a17" },
+      { title: "Alisa möcüzələr diyarında", author: "Lyuis Kerroll", category: "Uşaq kitabları", color: "#9a3b6b" }
+    ];
+
+    const ALL = "Hamısı";
+    const filters = document.getElementById("filters");
+    const grid = document.getElementById("grid");
+    const count = document.getElementById("count");
+
+    // Kateqoriyaların təkrarsız siyahısı: "Hamısı" + kitablardakı kateqoriyalar
+    const categories = [ALL, ...new Set(books.map((b) => b.category))];
+
+    // Seçilmiş kateqoriyaya görə kitabları ekrana çıxarır
+    function render(selected) {
+      grid.textContent = ""; // əvvəlki kartları təmizləyirik
+      const list = selected === ALL ? books : books.filter((b) => b.category === selected);
+
+      list.forEach((book) => {
+        // Bütün mətnlər textContent ilə yazılır: kitab məlumatı HTML kimi icra olunmur
+        const card = document.createElement("article");
+        card.className = "book";
+
+        const cover = document.createElement("div");
+        cover.className = "cover";
+        cover.style.setProperty("--c", book.color);
+        if (book.image) {
+          const img = document.createElement("img");
+          img.src = book.image;
+          img.alt = book.title + " kitabının üz qabığı";
+          cover.appendChild(img);
+        } else {
+          const t = document.createElement("span");
+          t.textContent = book.title;
+          cover.appendChild(t);
+        }
+
+        const info = document.createElement("div");
+        info.className = "book-info";
+        const h = document.createElement("h3");
+        h.textContent = book.title;
+        const a = document.createElement("p");
+        a.className = "author";
+        a.textContent = book.author;
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = book.category;
+        info.append(h, a, tag);
+
+        card.append(cover, info);
+        grid.appendChild(card);
+      });
+
+      count.textContent = list.length + " kitab göstərilir";
+    }
+
+    // Kateqoriya düymələrini yaradırıq
+    categories.forEach((name) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = name;
+      b.setAttribute("aria-pressed", name === ALL ? "true" : "false");
+      b.addEventListener("click", () => {
+        filters.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false"));
+        b.setAttribute("aria-pressed", "true");
+        render(name);
+      });
+      filters.appendChild(b);
+    });
+
+    render(ALL); // səhifə açılanda hamısı göstərilir
+  </script>
+
+</body>
+</html>

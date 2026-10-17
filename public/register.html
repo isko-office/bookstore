@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qeydiyyat | Kitab Evi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Literata:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="index.html">Kitab Evi</a>
+  </header>
+
+  <main class="auth-wrap">
+    <div class="auth-card">
+      <h1>Qeydiyyat</h1>
+      <p class="sub">Yeni hesab yaradın.</p>
+
+      <form id="registerForm" novalidate>
+        <label for="username">İstifadəçi adı</label>
+        <input id="username" name="username" type="text" autocomplete="username" minlength="3" maxlength="30" required>
+        <p class="hint">3-30 simvol.</p>
+
+        <label for="password">Şifrə</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+        <p class="hint">Ən azı 8 simvol. Şifrə bazada hash şəklində saxlanılacaq.</p>
+
+        <label for="confirm">Şifrənin təkrarı</label>
+        <input id="confirm" name="confirm" type="password" autocomplete="new-password" required>
+
+        <div id="msg" class="msg" role="alert"></div>
+
+        <button id="submitBtn" class="btn btn-primary" type="submit">Hesab yarat</button>
+      </form>
+
+      <p class="switch">Hesabınız var? <a href="login.html">Daxil olun</a></p>
+    </div>
+  </main>
+
+  <script>
+    const form = document.getElementById("registerForm");
+    const msg = document.getElementById("msg");
+    const btn = document.getElementById("submitBtn");
+
+    // Mesajı təhlükəsiz göstərir (textContent: HTML kimi icra olunmur)
+    function showMessage(text, type) {
+      msg.textContent = text;
+      msg.className = "msg " + type;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const username = form.username.value.trim();
+      const password = form.password.value;
+      const confirm = form.confirm.value;
+
+      // Brauzer tərəfində yoxlamalar. Bunlar yalnız istifadəçiyə kömək üçündür,
+      // çünki hücumçu bu yoxlamaları keçib sorğunu birbaşa göndərə bilər.
+      // Əsl yoxlama backend-də də aparılmalıdır.
+      if (username.length < 3 || username.length > 30) {
+        showMessage("İstifadəçi adı 3-30 simvol olmalıdır.", "error");
+        return;
+      }
+      if (password.length < 8) {
+        showMessage("Şifrə ən azı 8 simvol olmalıdır.", "error");
+        return;
+      }
+      if (password !== confirm) {
+        showMessage("Şifrələr eyni deyil.", "error");
+        return;
+      }
+
+      btn.disabled = true;
+      showMessage("Hesab yaradılır. Server yatıbsa, ilk sorğu bir az çəkə bilər.", "info");
+
+      try {
+        // Nisbi yol: həm localhost-da, həm Render-də işləyir
+        const res = await fetch("/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }) // təkrar şifrə serverə göndərilmir
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          showMessage("Qeydiyyat uğurludur. Giriş səhifəsinə yönləndirilirsiniz...", "ok");
+          setTimeout(() => { window.location.href = "/login.html"; }, 1200);
+        } else {
+          showMessage(data.message || data.error || "Qeydiyyat alınmadı. Məlumatları yoxlayın.", "error");
+        }
+      } catch (err) {
+        showMessage("Serverə qoşulmaq mümkün olmadı. Bir az sonra yenidən cəhd edin.", "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+
+</body>
+</html>

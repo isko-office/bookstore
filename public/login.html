@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Giriş | Kitab Evi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Literata:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="index.html">Kitab Evi</a>
+  </header>
+
+  <main class="auth-wrap">
+    <div class="auth-card">
+      <h1>Giriş</h1>
+      <p class="sub">Hesabınıza daxil olun.</p>
+
+      <form id="loginForm" novalidate>
+        <label for="username">İstifadəçi adı</label>
+        <input id="username" name="username" type="text" autocomplete="username" maxlength="30" required>
+
+        <label for="password">Şifrə</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <!-- Serverin cavabı burada göstərilir (role="alert" ekran oxuyucuya xəbər verir) -->
+        <div id="msg" class="msg" role="alert"></div>
+
+        <button id="submitBtn" class="btn btn-primary" type="submit">Daxil ol</button>
+      </form>
+
+      <p class="switch">Hesabınız yoxdur? <a href="register.html">Qeydiyyatdan keçin</a></p>
+    </div>
+  </main>
+
+  <script>
+    // Form elementlərini tapırıq
+    const form = document.getElementById("loginForm");
+    const msg = document.getElementById("msg");
+    const btn = document.getElementById("submitBtn");
+
+    // Mesajı ekranda göstərir. textContent istifadə edirik (innerHTML yox),
+    // çünki serverdən gələn mətn HTML kimi icra olunmamalıdır (XSS-dən qorunma).
+    function showMessage(text, type) {
+      msg.textContent = text;
+      msg.className = "msg " + type;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault(); // səhifənin yenilənməsinin qarşısını alırıq
+
+      const username = form.username.value.trim();
+      const password = form.password.value;
+
+      // Sadə yoxlama (bu yalnız rahatlıq üçündür, əsas yoxlama serverdədir)
+      if (!username || !password) {
+        showMessage("İstifadəçi adını və şifrəni daxil edin.", "error");
+        return;
+      }
+
+      btn.disabled = true; // təkrar basılmasın
+      showMessage("Yoxlanılır. Server yatıbsa, ilk sorğu bir az çəkə bilər.", "info");
+
+      try {
+        // Nisbi yol: sayt harada işləyirsə (localhost və ya Render), sorğu ora gedir
+        const res = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+
+        // Cavab JSON deyilsə belə xəta verməsin deyə boş obyekt qaytarırıq
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          showMessage("Giriş uğurludur. Yönləndirilirsiniz...", "ok");
+          setTimeout(() => { window.location.href = "/bookstore.html"; }, 800);
+        } else {
+          showMessage(data.message || data.error || "Giriş alınmadı. Məlumatları yoxlayın.", "error");
+        }
+      } catch (err) {
+        // Şəbəkə xətası (server əlçatmazdır və s.)
+        showMessage("Serverə qoşulmaq mümkün olmadı. Bir az sonra yenidən cəhd edin.", "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+
+</body>
+</html>
