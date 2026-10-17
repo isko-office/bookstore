@@ -1,6 +1,7 @@
 /* ==========================================================
    style.css - Kitab Evi (BookStore) bütün səhifələr üçün ümumi dizayn
-   Şriftlər HTML-də Google Fonts ilə yüklənir; yüklənməzsə Georgia/system-ui işləyir.
+   Bölmələr: 1 Rənglər | 2 Üst panel | 3 Düymələr | 4 Əsas səhifə
+             5 Giriş/Qeydiyyat | 6 Mağaza (YENİ) | 7 Kiçik ekranlar
    ========================================================== */
 
 /* 1. Rənglər bir yerdə - lazım olsa yalnız burada dəyişirik */
@@ -29,6 +30,9 @@ body {
 h1, h2, h3 { font-family: "Literata", Georgia, serif; line-height: 1.2; margin: 0; }
 a { color: inherit; }
 
+/* hidden atributu olan elementlər həmişə gizli qalsın */
+[hidden] { display: none !important; }
+
 /* Klaviatura ilə gəzənlər üçün görünən fokus */
 :focus-visible { outline: 3px solid var(--plum); outline-offset: 2px; }
 
@@ -56,6 +60,7 @@ a { color: inherit; }
   border: 2px solid transparent; cursor: pointer;
   transition: background-color .15s;
 }
+.btn-sm { padding: 7px 14px; font-size: .92rem; }
 .btn-primary { background: var(--accent); color: var(--ink); }
 .btn-primary:hover { background: #cf951a; }
 .btn-ghost { border-color: currentColor; background: transparent; color: inherit; }
@@ -115,42 +120,143 @@ footer { text-align: center; color: var(--muted); padding: 24px 16px; font-size:
 .msg.ok    { display: block; background: #e5f4ea; color: var(--ok); }
 .msg.info  { display: block; background: #e8eef5; color: var(--ink); }
 
-/* 6. Mağaza səhifəsi (bookstore.html) */
-.store { max-width: 1080px; margin: 0 auto; padding: 32px clamp(16px, 5vw, 48px) 56px; }
-.store h1 { font-size: 2rem; }
-.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 8px; }
-.filters button {
-  padding: 8px 16px; border-radius: 999px; cursor: pointer;
-  border: 1px solid #aab6c2; background: var(--card); color: var(--ink); font: 500 .95rem "Work Sans", system-ui, sans-serif;
+/* ==========================================================
+   6. MAĞAZA SƏHİFƏSİ (bookstore.html) - YENİ
+   ========================================================== */
+
+/* 6.1 Yuxarı hissə: başlıq + kateqoriyalar birlikdə yapışqandır */
+.shop-top { position: sticky; top: 0; z-index: 30; }
+
+.shop-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 12px clamp(16px, 4vw, 40px);
+  background: var(--ink); color: #fff;
 }
-.filters button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
-.count { color: var(--muted); margin: 0 0 20px; }
-
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 24px; }
-.book { background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-
-/* Üz qabığı: şəkil yoxdursa rəngli CSS qabıq göstərilir */
-.cover {
-  aspect-ratio: 3 / 4; display: flex; align-items: flex-end; padding: 16px 14px;
-  background: var(--c, var(--ink)); color: #fff;
-  box-shadow: inset 12px 0 0 rgba(0, 0, 0, .22); /* kitabın kürək hissəsi */
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.profile { display: flex; align-items: center; gap: 8px; max-width: 170px; }
+.profile #profileName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.avatar {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px;
+  border-radius: 50%; background: #2c3b5a; font-weight: 700; font-size: .95rem;
 }
-.cover span { font-family: "Literata", Georgia, serif; font-weight: 700; font-size: 1.1rem; line-height: 1.25; }
-.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cover:has(img) { padding: 0; }
 
-.book-info { padding: 12px 14px 14px; }
-.book-info h3 { font-size: 1rem; }
-.book-info .author { margin: 2px 0 8px; color: var(--muted); font-size: .9rem; }
-.tag { display: inline-block; font-size: .8rem; padding: 2px 10px; border-radius: 999px; background: #efe3ec; color: var(--plum); }
+/* 6.2 Kateqoriyalar paneli */
+.cats-bar { background: var(--card); border-bottom: 1px solid var(--line); }
+.cats-inner {
+  max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 14px;
+  padding: 10px clamp(16px, 4vw, 40px);
+}
+.cats-label {
+  flex: none; font-size: .8rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .07em;
+}
+.cats { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0; scrollbar-width: thin; }
+.cat-btn {
+  flex: none; padding: 8px 16px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  border: 1px solid #aab6c2; background: var(--card); color: var(--ink);
+  font: 500 .95rem "Work Sans", system-ui, sans-serif;
+  transition: background-color .15s, border-color .15s;
+}
+.cat-btn:hover { border-color: var(--ink); }
+.cat-btn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* 6.3 Əsas məzmun */
+.shop { max-width: 1180px; margin: 0 auto; padding: 28px clamp(16px, 4vw, 40px) 64px; }
+.view-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
+}
+.view-head h1 { font-size: clamp(1.5rem, 3.4vw, 2.1rem); }
+.view-head p { margin: 4px 0 0; color: var(--muted); }
+.back-btn {
+  padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  border: 2px solid var(--ink); background: transparent; color: var(--ink);
+  font: 600 .95rem "Work Sans", system-ui, sans-serif;
+}
+.back-btn:hover { background: var(--ink); color: #fff; }
+
+/* 6.4 Kitab kartları (ölçülər sabit: şəkil həmişə 2:3 nisbətindədir) */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px; }
+.card {
+  display: flex; flex-direction: column; background: var(--card);
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(23, 35, 59, .06);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.card:hover { transform: translateY(-4px); box-shadow: 0 14px 28px rgba(23, 35, 59, .16); }
+
+.cover { position: relative; aspect-ratio: 2 / 3; overflow: hidden; background: linear-gradient(160deg, #dfe6ee, #c9d3df); }
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s ease; }
+.card:hover .cover img { transform: scale(1.04); }
+
+/* Şəkil yüklənməsə: üz qabığı formasında yazılı ehtiyat dizayn */
+.cover-fallback {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between;
+  padding: 20px 16px 16px 22px; color: #fff;
+  box-shadow: inset 10px 0 0 rgba(0, 0, 0, .22); /* kitabın kürək hissəsi */
+}
+.cover-fallback strong { font-family: "Literata", Georgia, serif; font-size: 1.1rem; line-height: 1.25; }
+.cover-fallback small { opacity: .85; }
+
+.card-body { display: flex; flex-direction: column; gap: 6px; padding: 14px; flex: 1; }
+.tag-btn {
+  align-self: flex-start; padding: 2px 10px; border: 0; border-radius: 999px; cursor: pointer;
+  background: #efe3ec; color: var(--plum); font: 500 .78rem "Work Sans", system-ui, sans-serif;
+}
+.tag-btn:hover { background: #e4cfdf; }
+.card h3 {
+  font-size: 1rem; min-height: 2.4em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.card .author { margin: 0; color: var(--muted); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-foot { margin-top: auto; padding-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.price { font-weight: 700; font-size: 1.05rem; }
+
+/* 6.5 Səbət paneli (sağdan açılır) */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(23, 35, 59, .45); }
+.cart-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50;
+  width: min(400px, 100%); display: flex; flex-direction: column;
+  background: var(--card); box-shadow: -12px 0 32px rgba(23, 35, 59, .25);
+}
+.cart-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.cart-head h2 { font-size: 1.3rem; }
+.icon-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font-size: 1.1rem; cursor: pointer;
+}
+.icon-btn:hover { background: var(--paper); }
+.cart-list { list-style: none; margin: 0; padding: 4px 20px; overflow-y: auto; flex: 1; }
+.cart-empty { color: var(--muted); text-align: center; padding: 32px 0; }
+.cart-item { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.cart-item strong { display: block; line-height: 1.3; }
+.cart-item small { color: var(--muted); }
+.cart-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.qty { display: flex; align-items: center; gap: 8px; }
+.qty button {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid #aab6c2;
+  background: var(--card); color: var(--ink); font-size: 1rem; cursor: pointer;
+}
+.cart-foot { padding: 16px 20px; border-top: 1px solid var(--line); }
+.cart-total { display: flex; justify-content: space-between; font-weight: 700; font-size: 1.1rem; margin-bottom: 12px; }
+.cart-foot .btn { width: 100%; color: var(--ink); border-color: var(--ink); }
+.cart-foot .btn:hover { background: rgba(23, 35, 59, .08); }
 
 /* 7. Kiçik ekranlar */
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; padding-top: 32px; }
   .shelf { height: 160px; }
   .auth-card { padding: 24px 20px; }
+  .cats-label { display: none; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .card-body { padding: 10px; }
+}
+@media (max-width: 520px) {
+  .profile #profileName { display: none; }
+  .shop-header .brand { font-size: 1.05rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn { transition: none; }
+  .btn, .cat-btn, .card, .cover img { transition: none; }
+  .card:hover, .card:hover .cover img { transform: none; }
 }

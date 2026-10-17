@@ -86,6 +86,7 @@ app.use(
         // Səhifələrimizdə inline <script> var, ona görə 'unsafe-inline' lazımdır.
         // Təkmilləşdirmə: skriptləri ayrı .js fayllara çıxarıb bunu silmək olar.
         "script-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "https://covers.openlibrary.org", "https://archive.org", "https://*.archive.org"],
         // Lokalda (http) bu direktiv CSS-i pozur, ona görə yalnız canlıda aktivdir
         "upgrade-insecure-requests": isProd ? [] : null
       }
@@ -266,6 +267,11 @@ app.get("/api/audit-logs", requireAdmin, async (req, res) => {
 // DİQQƏT: bu marşrut express.static-dən ƏVVƏL yazılmalıdır, yoxsa fayl hamıya açıq olar.
 app.get("/bookstore.html", requirePageLogin, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "bookstore.html"));
+});
+
+app.get("/api/me", (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ message: "Daxil olmamısınız." });
+  res.json({ username: req.session.username, role: req.session.role });
 });
 
 // ----- Qalan statik fayllar (index, login, register, style.css) -----

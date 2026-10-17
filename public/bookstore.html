@@ -11,109 +11,450 @@
 </head>
 <body>
 
-  <header class="topbar">
-    <a class="brand" href="bookstore.html">Kitab Evi</a>
-    <nav>
-      <a class="btn btn-ghost" href="index.html">Çıxış</a>
+  <!-- ===== Yuxarı hissə: başlıq + kateqoriyalar (səhifəni sürüşdürəndə yapışıq qalır) ===== -->
+  <div class="shop-top">
+    <header class="shop-header">
+      <a class="brand" href="/bookstore.html">Kitab Evi</a>
+
+      <div class="header-actions">
+        <!-- Profil: istifadəçi adı /api/me-dən gəlir (server.js-ə əlavə edilməlidir) -->
+        <div class="profile">
+          <span class="avatar" id="avatar" aria-hidden="true">👤</span>
+          <span id="profileName">Profil</span>
+        </div>
+        <!-- Çıxış: server tərəfdəki /logout marşrutu sessiyanı bağlayır -->
+        <a class="btn btn-ghost btn-sm" href="/logout">Çıxış</a>
+        <button class="btn btn-primary btn-sm" id="cartBtn" type="button" aria-expanded="false" aria-controls="cartPanel">
+          🛒 Səbət (<span id="cartCount">0</span>)
+        </button>
+      </div>
+    </header>
+
+    <nav class="cats-bar" aria-label="Kateqoriyalar">
+      <div class="cats-inner">
+        <span class="cats-label">Kateqoriyalar</span>
+        <div class="cats" id="cats"></div>
+      </div>
     </nav>
-  </header>
+  </div>
 
-  <main class="store">
-    <h1>Kitab kataloqu</h1>
-
-    <!-- Kateqoriya düymələri JavaScript ilə yaradılır -->
-    <div id="filters" class="filters" role="group" aria-label="Kateqoriyalar"></div>
-    <p id="count" class="count" aria-live="polite"></p>
-
-    <!-- Kitab kartları JavaScript ilə yaradılır -->
-    <div id="grid" class="grid"></div>
+  <!-- ===== Əsas məzmun: ya "Önərilənlər", ya seçilmiş kateqoriyanın siyahısı ===== -->
+  <main class="shop">
+    <div class="view-head">
+      <div>
+        <h1 id="viewTitle">Önərilənlər</h1>
+        <p id="viewSub"></p>
+      </div>
+      <button class="back-btn" id="backBtn" type="button" hidden>← Hamısı</button>
+    </div>
+    <div class="cards" id="cards" aria-live="polite"></div>
   </main>
 
+  <!-- ===== Səbət paneli ===== -->
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="cart-panel" id="cartPanel" aria-label="Səbət" hidden>
+    <div class="cart-head">
+      <h2>Səbət</h2>
+      <button class="icon-btn" id="cartClose" type="button" aria-label="Səbəti bağla">✕</button>
+    </div>
+    <ul class="cart-list" id="cartList"></ul>
+    <div class="cart-foot">
+      <div class="cart-total"><span>Cəmi</span><span id="cartTotal">0.00 ₼</span></div>
+      <button class="btn" id="cartClear" type="button">Səbəti təmizlə</button>
+    </div>
+  </aside>
+
   <script>
-    /* ------------------------------------------------------------
-       Kitab siyahısı. Şəkil əlavə etmək üçün sətrə image sahəsi yazın,
-       məsələn: image: "images/clean-code.jpg" (şəkil public/images/ qovluğunda olsun).
-       image yoxdursa, rəngli qabıq göstərilir.
-       ------------------------------------------------------------ */
-    const books = [
-      { title: "Əli və Nino", author: "Qurban Səid", category: "Bədii ədəbiyyat", color: "#6b2d5c" },
-      { title: "Leyli və Məcnun", author: "Məhəmməd Füzuli", category: "Bədii ədəbiyyat", color: "#8a3b2e" },
-      { title: "1984", author: "George Orwell", category: "Bədii ədəbiyyat", color: "#2b3a55" },
-      { title: "Kitabi-Dədə Qorqud", author: "Xalq dastanı", category: "Tarix və mədəniyyət", color: "#3e5c4a" },
-      { title: "Sapiens", author: "Yuval Noah Harari", category: "Tarix və mədəniyyət", color: "#7a5b1e" },
-      { title: "Applied Cryptography", author: "Bruce Schneier", category: "Texnologiya", color: "#1f4e5f" },
-      { title: "The Pragmatic Programmer", author: "Hunt & Thomas", category: "Texnologiya", color: "#4a3f6b" },
-      { title: "Clean Code", author: "Robert C. Martin", category: "Texnologiya", color: "#2f5d3a" },
-      { title: "Kiçik Şahzadə", author: "Antuan de Sent-Ekzüperi", category: "Uşaq kitabları", color: "#a35a17" },
-      { title: "Alisa möcüzələr diyarında", author: "Lyuis Kerroll", category: "Uşaq kitabları", color: "#9a3b6b" }
+    /* =========================================================
+       1. MƏLUMATLAR
+       Hər kitab: [ISBN, ad, müəllif, qiymət (AZN)]
+       Üz qabığı ISBN ilə Open Library-dən yüklənir.
+       Qiymətlər nümunə (demo) qiymətlərdir.
+       ========================================================= */
+    const CATEGORIES = [
+      { id: "fiction", name: "Bədii Ədəbiyyat",    emoji: "🎭" },
+      { id: "crime",   name: "Detektiv",           emoji: "🔍" },
+      { id: "tech",    name: "Elmi/Texnologiya",   emoji: "🔬" },
+      { id: "history", name: "Tarix və Mədəniyyət", emoji: "🏛️" },
+      { id: "self",    name: "Fərdi İnkişaf",      emoji: "🌱" },
+      { id: "kids",    name: "Uşaq Kitabları",     emoji: "🧸" }
     ];
 
-    const ALL = "Hamısı";
-    const filters = document.getElementById("filters");
-    const grid = document.getElementById("grid");
-    const count = document.getElementById("count");
+    const DATA = {
+      fiction: [
+        ["9780451524935", "1984", "George Orwell", 13.90],
+        ["9780451526342", "Animal Farm", "George Orwell", 9.90],
+        ["9780743273565", "The Great Gatsby", "F. Scott Fitzgerald", 12.50],
+        ["9780061120084", "To Kill a Mockingbird", "Harper Lee", 15.90],
+        ["9780141439518", "Pride and Prejudice", "Jane Austen", 11.90],
+        ["9780062315007", "The Alchemist", "Paulo Coelho", 14.50],
+        ["9780140449136", "Crime and Punishment", "Fyodor Dostoevsky", 16.90],
+        ["9780060883287", "One Hundred Years of Solitude", "Gabriel García Márquez", 17.90],
+        ["9780316769488", "The Catcher in the Rye", "J. D. Salinger", 13.50],
+        ["9780060850524", "Brave New World", "Aldous Huxley", 14.90],
+        ["9781451673319", "Fahrenheit 451", "Ray Bradbury", 13.90],
+        ["9780156012195", "The Little Prince", "Antoine de Saint-Exupéry", 12.90],
+        ["9780679720201", "The Stranger", "Albert Camus", 12.50],
+        ["9780375705908", "Ali and Nino", "Kurban Said", 16.50],
+        ["9780684801223", "The Old Man and the Sea", "Ernest Hemingway", 10.90]
+      ],
+      crime: [
+        ["9780062693662", "Murder on the Orient Express", "Agatha Christie", 13.90],
+        ["9780062073488", "And Then There Were None", "Agatha Christie", 13.90],
+        ["9780062073563", "The Murder of Roger Ackroyd", "Agatha Christie", 13.50],
+        ["9780062073556", "Death on the Nile", "Agatha Christie", 13.90],
+        ["9780307454546", "The Girl with the Dragon Tattoo", "Stieg Larsson", 16.90],
+        ["9780307588371", "Gone Girl", "Gillian Flynn", 15.90],
+        ["9780307474278", "The Da Vinci Code", "Dan Brown", 15.50],
+        ["9781416524793", "Angels & Demons", "Dan Brown", 15.50],
+        ["9781594634024", "The Girl on the Train", "Paula Hawkins", 14.90],
+        ["9780394758282", "The Big Sleep", "Raymond Chandler", 13.50],
+        ["9780679722649", "The Maltese Falcon", "Dashiell Hammett", 13.50],
+        ["9780544176560", "The Name of the Rose", "Umberto Eco", 18.90],
+        ["9781400031702", "The Secret History", "Donna Tartt", 17.50]
+      ],
+      tech: [
+        ["9780132350884", "Clean Code", "Robert C. Martin", 39.90],
+        ["9780135957059", "The Pragmatic Programmer", "Andrew Hunt, David Thomas", 44.90],
+        ["9780201633610", "Design Patterns", "Erich Gamma et al.", 49.90],
+        ["9780134757599", "Refactoring", "Martin Fowler", 47.90],
+        ["9780262046305", "Introduction to Algorithms", "Thomas H. Cormen et al.", 79.90],
+        ["9780471117094", "Applied Cryptography", "Bruce Schneier", 59.90],
+        ["9780470474242", "Cryptography Engineering", "Ferguson, Schneier, Kohno", 52.90],
+        ["9781119642787", "Security Engineering", "Ross Anderson", 64.90],
+        ["9781118026472", "The Web Application Hacker's Handbook", "Stuttard, Pinto", 54.90],
+        ["9781593271442", "Hacking: The Art of Exploitation", "Jon Erickson", 42.90],
+        ["9780134610993", "Artificial Intelligence: A Modern Approach", "Russell, Norvig", 89.90],
+        ["9780262035613", "Deep Learning", "Ian Goodfellow et al.", 69.90],
+        ["9780553380163", "A Brief History of Time", "Stephen Hawking", 15.90],
+        ["9780345539434", "Cosmos", "Carl Sagan", 17.90],
+        ["9780393609394", "Astrophysics for People in a Hurry", "Neil deGrasse Tyson", 13.90]
+      ],
+      history: [
+        ["9780062316110", "Sapiens", "Yuval Noah Harari", 21.90],
+        ["9780062464316", "Homo Deus", "Yuval Noah Harari", 21.90],
+        ["9780525512189", "21 Lessons for the 21st Century", "Yuval Noah Harari", 20.90],
+        ["9780393354324", "Guns, Germs, and Steel", "Jared Diamond", 19.90],
+        ["9780062397348", "A People's History of the United States", "Howard Zinn", 22.90],
+        ["9781101912379", "The Silk Roads", "Peter Frankopan", 23.90],
+        ["9781631492228", "SPQR", "Mary Beard", 22.90],
+        ["9781451651683", "The Rise and Fall of the Third Reich", "William L. Shirer", 27.90],
+        ["9780393059748", "The History of the Ancient World", "Susan Wise Bauer", 29.90],
+        ["9780609809648", "Genghis Khan and the Making of the Modern World", "Jack Weatherford", 19.90],
+        ["9781501121470", "Prisoners of Geography", "Tim Marshall", 17.90],
+        ["9780143037750", "Postwar", "Tony Judt", 26.90],
+        ["9780345476098", "The Guns of August", "Barbara W. Tuchman", 18.90],
+        ["9781400032051", "1491", "Charles C. Mann", 19.90],
+        ["9780140440577", "The Travels of Marco Polo", "Marco Polo", 14.90]
+      ],
+      self: [
+        ["9780735211292", "Atomic Habits", "James Clear", 19.90],
+        ["9781455586691", "Deep Work", "Cal Newport", 18.90],
+        ["9780671027032", "How to Win Friends and Influence People", "Dale Carnegie", 14.90],
+        ["9781982137274", "The 7 Habits of Highly Effective People", "Stephen R. Covey", 18.90],
+        ["9780374533557", "Thinking, Fast and Slow", "Daniel Kahneman", 21.90],
+        ["9780345472328", "Mindset", "Carol S. Dweck", 17.90],
+        ["9780807014295", "Man's Search for Meaning", "Viktor E. Frankl", 13.90],
+        ["9780812981605", "The Power of Habit", "Charles Duhigg", 17.90],
+        ["9780804137386", "Essentialism", "Greg McKeown", 17.90],
+        ["9780143130727", "Ikigai", "Héctor García, Francesc Miralles", 15.90],
+        ["9780062457714", "The Subtle Art of Not Giving a F*ck", "Mark Manson", 16.90],
+        ["9781612680194", "Rich Dad Poor Dad", "Robert T. Kiyosaki", 15.90],
+        ["9780812968255", "Meditations", "Marcus Aurelius", 13.90],
+        ["9781501111112", "Grit", "Angela Duckworth", 18.90],
+        ["9781585424337", "Think and Grow Rich", "Napoleon Hill", 14.50]
+      ],
+      kids: [
+        ["9780399226908", "The Very Hungry Caterpillar", "Eric Carle", 11.90],
+        ["9780060254926", "Where the Wild Things Are", "Maurice Sendak", 12.90],
+        ["9780064400558", "Charlotte's Web", "E. B. White", 11.90],
+        ["9780590353427", "Harry Potter and the Sorcerer's Stone", "J. K. Rowling", 16.90],
+        ["9780060256654", "The Giving Tree", "Shel Silverstein", 12.90],
+        ["9780142410370", "Matilda", "Roald Dahl", 10.90],
+        ["9780142410318", "Charlie and the Chocolate Factory", "Roald Dahl", 10.90],
+        ["9780064471046", "The Lion, the Witch and the Wardrobe", "C. S. Lewis", 12.90],
+        ["9780547928227", "The Hobbit", "J. R. R. Tolkien", 15.90],
+        ["9780394800165", "Green Eggs and Ham", "Dr. Seuss", 9.90],
+        ["9780394800011", "The Cat in the Hat", "Dr. Seuss", 9.90],
+        ["9780060775858", "Goodnight Moon", "Margaret Wise Brown", 9.90],
+        ["9780810993136", "Diary of a Wimpy Kid", "Jeff Kinney", 12.90],
+        ["9780375869020", "Wonder", "R. J. Palacio", 13.90],
+        ["9780786838653", "The Lightning Thief", "Rick Riordan", 13.90]
+      ]
+    };
 
-    // Kateqoriyaların təkrarsız siyahısı: "Hamısı" + kitablardakı kateqoriyalar
-    const categories = [ALL, ...new Set(books.map((b) => b.category))];
+    // "Önərilənlər" bölməsində göstərilən 10 kitab (ISBN siyahısı)
+    const FEATURED = [
+      "9780735211292", "9780451524935", "9780062316110", "9780132350884", "9780062073488",
+      "9780590353427", "9780062315007", "9780807014295", "9780156012195", "9780471117094"
+    ];
 
-    // Seçilmiş kateqoriyaya görə kitabları ekrana çıxarır
-    function render(selected) {
-      grid.textContent = ""; // əvvəlki kartları təmizləyirik
-      const list = selected === ALL ? books : books.filter((b) => b.category === selected);
+    // Şəkli özünüz yükləmək istəsəniz (public/images/ qovluğuna), ISBN üçün yol yazın:
+    // const COVER_OVERRIDES = { "9780132350884": "images/clean-code.jpg" };
+    const COVER_OVERRIDES = {};
 
-      list.forEach((book) => {
-        // Bütün mətnlər textContent ilə yazılır: kitab məlumatı HTML kimi icra olunmur
-        const card = document.createElement("article");
-        card.className = "book";
-
-        const cover = document.createElement("div");
-        cover.className = "cover";
-        cover.style.setProperty("--c", book.color);
-        if (book.image) {
-          const img = document.createElement("img");
-          img.src = book.image;
-          img.alt = book.title + " kitabının üz qabığı";
-          cover.appendChild(img);
-        } else {
-          const t = document.createElement("span");
-          t.textContent = book.title;
-          cover.appendChild(t);
-        }
-
-        const info = document.createElement("div");
-        info.className = "book-info";
-        const h = document.createElement("h3");
-        h.textContent = book.title;
-        const a = document.createElement("p");
-        a.className = "author";
-        a.textContent = book.author;
-        const tag = document.createElement("span");
-        tag.className = "tag";
-        tag.textContent = book.category;
-        info.append(h, a, tag);
-
-        card.append(cover, info);
-        grid.appendChild(card);
+    // Siyahıları düz massivə çeviririk və ISBN ilə axtarış üçün lüğət qururuq
+    const BOOKS = [];
+    const BY_ISBN = {};
+    CATEGORIES.forEach((c) => {
+      (DATA[c.id] || []).forEach(([isbn, title, author, price]) => {
+        const book = { isbn, title, author, price, cat: c.id };
+        BOOKS.push(book);
+        BY_ISBN[isbn] = book;
       });
-
-      count.textContent = list.length + " kitab göstərilir";
-    }
-
-    // Kateqoriya düymələrini yaradırıq
-    categories.forEach((name) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = name;
-      b.setAttribute("aria-pressed", name === ALL ? "true" : "false");
-      b.addEventListener("click", () => {
-        filters.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false"));
-        b.setAttribute("aria-pressed", "true");
-        render(name);
-      });
-      filters.appendChild(b);
     });
 
-    render(ALL); // səhifə açılanda hamısı göstərilir
+    /* =========================================================
+       2. KÖMƏKÇİ FUNKSİYALAR
+       Bütün mətnlər textContent ilə yazılır (innerHTML yox),
+       beləliklə məlumat HTML kimi icra olunmur (XSS-dən qorunma).
+       ========================================================= */
+    const $ = (id) => document.getElementById(id);
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    const formatPrice = (n) => n.toFixed(2) + " ₼";
+    const catById = (id) => CATEGORIES.find((c) => c.id === id);
+
+    // Open Library: ?default=false -> şəkil yoxdursa boş şəkil əvəzinə xəta qaytarır,
+    // biz də ehtiyat dizaynı göstəririk
+    function coverUrl(book) {
+      return COVER_OVERRIDES[book.isbn] ||
+        "https://covers.openlibrary.org/b/isbn/" + book.isbn + "-L.jpg?default=false";
+    }
+
+    /* =========================================================
+       3. KART YARATMA
+       ========================================================= */
+    // Şəkil yüklənməzsə göstərilən yazılı üz qabığı (rəng kitabın adından alınır)
+    function makeFallback(book) {
+      let hue = 0;
+      for (const ch of book.title) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+      const box = el("div", "cover-fallback");
+      box.style.background = "linear-gradient(160deg, hsl(" + hue + " 42% 30%), hsl(" + hue + " 48% 16%))";
+      box.append(el("strong", null, book.title), el("small", null, book.author));
+      return box;
+    }
+
+    function makeCover(book) {
+      const wrap = el("div", "cover");
+      const img = new Image();
+      img.alt = book.title + " kitabının üz qabığı";
+      img.loading = "lazy";            // yalnız ekrana yaxınlaşanda yüklənir
+      img.decoding = "async";
+      img.referrerPolicy = "no-referrer";
+
+      function useFallback() {
+        if (!img.isConnected) return;  // iki dəfə işləməsin
+        img.remove();
+        wrap.appendChild(makeFallback(book));
+      }
+      img.addEventListener("error", useFallback);
+      img.addEventListener("load", () => { if (img.naturalWidth <= 1) useFallback(); });
+
+      img.src = coverUrl(book);
+      wrap.appendChild(img);
+      return wrap;
+    }
+
+    function makeCard(book) {
+      const card = el("article", "card");
+      card.appendChild(makeCover(book));
+
+      const body = el("div", "card-body");
+
+      // Kartdakı kateqoriya etiketinə klik -> həmin kateqoriyaya keçid
+      const tag = el("button", "tag-btn", catById(book.cat).name);
+      tag.type = "button";
+      tag.title = "Bu kateqoriyaya keç";
+      tag.addEventListener("click", () => go(book.cat));
+
+      const title = el("h3", null, book.title);
+      title.title = book.title;
+
+      const foot = el("div", "card-foot");
+      const btn = el("button", "btn btn-primary btn-sm", "Seçin");
+      btn.type = "button";
+      btn.addEventListener("click", () => {
+        addToCart(book.isbn);
+        btn.textContent = "Seçildi ✓";
+        setTimeout(() => { btn.textContent = "Seçin"; }, 1200);
+      });
+      foot.append(el("span", "price", formatPrice(book.price)), btn);
+
+      body.append(tag, title, el("p", "author", book.author), foot);
+      card.appendChild(body);
+      return card;
+    }
+
+    /* =========================================================
+       4. SƏHİFƏ GÖRÜNÜŞLƏRİ (Hamısı / kateqoriya)
+       ========================================================= */
+    const catsBox = $("cats");
+    const cardsBox = $("cards");
+    let current = "all";
+
+    // Kateqoriya düymələri: "Hamısı" + 6 kateqoriya
+    [{ id: "all", name: "Hamısı", emoji: "📚" }, ...CATEGORIES].forEach((c) => {
+      const b = el("button", "cat-btn", c.emoji + " " + c.name);
+      b.type = "button";
+      b.dataset.id = c.id;
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", () => go(c.id));
+      catsBox.appendChild(b);
+    });
+    $("backBtn").addEventListener("click", () => go("all"));
+
+    function render(id) {
+      current = id;
+      catsBox.querySelectorAll(".cat-btn").forEach((b) => {
+        b.setAttribute("aria-pressed", b.dataset.id === id ? "true" : "false");
+      });
+
+      let list;
+      if (id === "all") {
+        list = FEATURED.map((isbn) => BY_ISBN[isbn]);
+        $("viewTitle").textContent = "Önərilənlər";
+        $("viewSub").textContent = "Ən çox sevilən kitablar. Siyahını daraltmaq üçün kateqoriya seçin.";
+        $("backBtn").hidden = true;
+      } else {
+        const c = catById(id);
+        list = BOOKS.filter((b) => b.cat === id);
+        $("viewTitle").textContent = c.emoji + " " + c.name;
+        $("viewSub").textContent = list.length + " kitab";
+        $("backBtn").hidden = false;
+      }
+
+      cardsBox.textContent = "";
+      list.forEach((book) => cardsBox.appendChild(makeCard(book)));
+      window.scrollTo({ top: 0 });
+    }
+
+    // Kateqoriyanı dəyişir və ünvana yazır (brauzerin "geri" düyməsi də işləsin)
+    function go(id) {
+      history.pushState(null, "", id === "all" ? location.pathname : "#" + id);
+      render(id);
+    }
+
+    function idFromHash() {
+      const h = location.hash.slice(1);
+      return CATEGORIES.some((c) => c.id === h) ? h : "all";
+    }
+    window.addEventListener("popstate", () => render(idFromHash()));
+
+    /* =========================================================
+       5. SƏBƏT
+       Səbət yalnız bu brauzer sessiyasında saxlanılır (ISBN -> say).
+       Sifariş göndərmə serverə qoşulmayıb, bu hissə vitrin üçündür.
+       ========================================================= */
+    const CART_KEY = "kitabevi_cart";
+    let cart = {};
+
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(CART_KEY) || "{}");
+      for (const isbn in saved) {
+        const q = saved[isbn];
+        if (BY_ISBN[isbn] && Number.isInteger(q) && q > 0 && q < 100) cart[isbn] = q;
+      }
+    } catch (e) { /* saxlanmış məlumat oxunmadısa boş səbətlə başlayırıq */ }
+
+    function addToCart(isbn) { cart[isbn] = Math.min((cart[isbn] || 0) + 1, 99); updateCart(); }
+    function changeQty(isbn, delta) {
+      cart[isbn] = (cart[isbn] || 0) + delta;
+      if (cart[isbn] <= 0) delete cart[isbn];
+      updateCart();
+    }
+
+    function updateCart() {
+      try { sessionStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) { /* vacib deyil */ }
+
+      const items = Object.keys(cart);
+      $("cartCount").textContent = items.reduce((sum, i) => sum + cart[i], 0);
+
+      const list = $("cartList");
+      list.textContent = "";
+      let total = 0;
+
+      if (items.length === 0) {
+        list.appendChild(el("li", "cart-empty", "Səbət boşdur."));
+      }
+      items.forEach((isbn) => {
+        const b = BY_ISBN[isbn];
+        total += b.price * cart[isbn];
+
+        const li = el("li", "cart-item");
+        li.append(el("strong", null, b.title), el("small", null, b.author));
+
+        const minus = el("button", null, "−");
+        const plus = el("button", null, "+");
+        minus.type = plus.type = "button";
+        minus.setAttribute("aria-label", b.title + ": azalt");
+        plus.setAttribute("aria-label", b.title + ": artır");
+        minus.addEventListener("click", () => changeQty(isbn, -1));
+        plus.addEventListener("click", () => changeQty(isbn, 1));
+
+        const qty = el("div", "qty");
+        qty.append(minus, el("span", null, String(cart[isbn])), plus);
+
+        const row = el("div", "cart-row");
+        row.append(qty, el("span", "price", formatPrice(b.price * cart[isbn])));
+        li.appendChild(row);
+        list.appendChild(li);
+      });
+
+      $("cartTotal").textContent = formatPrice(total);
+      $("cartClear").disabled = items.length === 0;
+    }
+
+    // Səbət panelini açıb-bağlayırıq
+    function openCart() {
+      $("cartPanel").hidden = false;
+      $("scrim").hidden = false;
+      $("cartBtn").setAttribute("aria-expanded", "true");
+      $("cartClose").focus();
+    }
+    function closeCart() {
+      $("cartPanel").hidden = true;
+      $("scrim").hidden = true;
+      $("cartBtn").setAttribute("aria-expanded", "false");
+      $("cartBtn").focus();
+    }
+    $("cartBtn").addEventListener("click", openCart);
+    $("cartClose").addEventListener("click", closeCart);
+    $("scrim").addEventListener("click", closeCart);
+    $("cartClear").addEventListener("click", () => { cart = {}; updateCart(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !$("cartPanel").hidden) closeCart();
+    });
+
+    /* =========================================================
+       6. PROFİL (sessiya yoxlaması)
+       /api/me yalnız giriş etmiş istifadəçiyə cavab verir.
+       Sessiya bitibsə (401), login səhifəsinə qaytarırıq.
+       ========================================================= */
+    fetch("/api/me", { credentials: "same-origin" })
+      .then((res) => {
+        if (res.status === 401) { window.location.href = "/login.html"; return null; }
+        return res.ok ? res.json() : null;
+      })
+      .then((me) => {
+        if (me && typeof me.username === "string" && me.username) {
+          $("profileName").textContent = me.username;
+          $("avatar").textContent = me.username.charAt(0).toUpperCase();
+        }
+      })
+      .catch(() => { /* şəbəkə xətası: profil adı "Profil" olaraq qalır */ });
+
+    /* =========================================================
+       7. BAŞLANĞIC
+       ========================================================= */
+    updateCart();
+    render(idFromHash());
   </script>
 
 </body>
