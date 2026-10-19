@@ -8,6 +8,23 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Literata:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+
+  <!-- Şifrə tələbləri siyahısının üslubu (yalnız bu səhifə üçün) -->
+  <style>
+    .pw-rules { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: .9rem; }
+    .pw-rules li { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+    /* Hər qaydanın yanında rəngdən başqa işarə də var: ○ gözləyir, ✓ ödənib, ✗ pozulub */
+    .pw-rules li::before { content: "○"; width: 1.1em; text-align: center; flex: none; }
+    .pw-rules li.ok  { color: var(--ok); }
+    .pw-rules li.ok::before  { content: "✓"; font-weight: 700; }
+    .pw-rules li.bad { color: var(--error); }
+    .pw-rules li.bad::before { content: "✗"; font-weight: 700; }
+    .pw-note { font-size: .85rem; color: var(--muted); margin: 8px 0 0; }
+    .pw-note.bad { color: var(--error); }
+    .match-hint { font-size: .85rem; margin: 4px 0 0; min-height: 1.2em; color: var(--muted); }
+    .match-hint.ok  { color: var(--ok); }
+    .match-hint.bad { color: var(--error); }
+  </style>
 </head>
 <body>
 
@@ -23,14 +40,25 @@
       <form id="registerForm" novalidate>
         <label for="username">İstifadəçi adı</label>
         <input id="username" name="username" type="text" autocomplete="username" minlength="3" maxlength="30" required>
-        <p class="hint">3-30 simvol.</p>
+        <p class="hint">3-30 simvol: hərf, rəqəm, _ . -</p>
 
         <label for="password">Şifrə</label>
-        <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
-        <p class="hint">Ən azı 8 simvol. Şifrə bazada hash şəklində saxlanılacaq.</p>
+        <input id="password" name="password" type="password" autocomplete="new-password"
+               minlength="8" maxlength="64" aria-describedby="pwRules" required>
+
+        <!-- Şifrə tələbləri: yazdıqca canlı yoxlanılır -->
+        <ul class="pw-rules" id="pwRules">
+          <li data-rule="length">8-64 simvol</li>
+          <li data-rule="lower">Ən azı 1 kiçik hərf (a-z)</li>
+          <li data-rule="upper">Ən azı 1 böyük hərf (A-Z)</li>
+          <li data-rule="digit">Ən azı 1 rəqəm (0-9)</li>
+          <li data-rule="special">Ən azı 1 xüsusi simvol (! @ # $ % ^ &amp; * ...)</li>
+        </ul>
+        <p class="pw-note" id="asciiNote">Yalnız latın hərfləri, rəqəmlər və ASCII simvollar istifadə edin (ə, ö, ş kimi hərflər olmaz).</p>
 
         <label for="confirm">Şifrənin təkrarı</label>
-        <input id="confirm" name="confirm" type="password" autocomplete="new-password" required>
+        <input id="confirm" name="confirm" type="password" autocomplete="new-password" maxlength="64" required>
+        <p class="match-hint" id="matchHint" aria-live="polite"></p>
 
         <div id="msg" class="msg" role="alert"></div>
 
@@ -45,12 +73,68 @@
     const form = document.getElementById("registerForm");
     const msg = document.getElementById("msg");
     const btn = document.getElementById("submitBtn");
+    const pwInput = document.getElementById("password");
+    const confirmInput = document.getElementById("confirm");
+    const matchHint = document.getElementById("matchHint");
+    const asciiNote = document.getElementById("asciiNote");
 
     // Mesajı təhlükəsiz göstərir (textContent: HTML kimi icra olunmur)
     function showMessage(text, type) {
       msg.textContent = text;
       msg.className = "msg " + type;
     }
+
+    /* ---------------------------------------------------------
+       Şifrə qaydaları. Bunlar server.js-dəki PASSWORD_RULES ilə
+       EYNİDİR. Brauzerdəki yoxlama yalnız istifadəçiyə kömək üçündür:
+       hücumçu bu yoxlamanı keçib sorğunu birbaşa göndərə bilər,
+       ona görə əsl yoxlama serverdə də aparılır.
+       --------------------------------------------------------- */
+    const RULES = {
+      length:  (p) => p.length >= 8 && p.length <= 64,
+      lower:   (p) => /[a-z]/.test(p),
+      upper:   (p) => /[A-Z]/.test(p),
+      digit:   (p) => /[0-9]/.test(p),
+      special: (p) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(p)
+    };
+    const ASCII_ONLY = /^[\x20-\x7E]*$/;
+
+    // Siyahıdakı hər qaydanı yeniləyir. Hələ heç nə yazılmayıbsa neytral qalır.
+    // Qaytarır: bütün tələblər ödənibmi (true/false)
+    function checkPassword() {
+      const p = pwInput.value;
+      let allOk = true;
+
+      document.querySelectorAll("#pwRules li").forEach((li) => {
+        const ok = RULES[li.dataset.rule](p);
+        if (!ok) allOk = false;
+        li.className = p.length === 0 ? "" : ok ? "ok" : "bad";
+      });
+
+      const asciiOk = ASCII_ONLY.test(p);
+      asciiNote.className = "pw-note" + (asciiOk ? "" : " bad");
+      if (!asciiOk) allOk = false;
+
+      return allOk;
+    }
+
+    // Şifrə və təkrarının eyni olub-olmadığını göstərir
+    function checkMatch() {
+      const a = pwInput.value;
+      const b = confirmInput.value;
+      if (b.length === 0) {
+        matchHint.textContent = "";
+        matchHint.className = "match-hint";
+        return false;
+      }
+      const same = a === b;
+      matchHint.textContent = same ? "✓ Şifrələr eynidir." : "✗ Şifrələr eyni deyil.";
+      matchHint.className = "match-hint " + (same ? "ok" : "bad");
+      return same;
+    }
+
+    pwInput.addEventListener("input", () => { checkPassword(); checkMatch(); });
+    confirmInput.addEventListener("input", checkMatch);
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -59,15 +143,14 @@
       const password = form.password.value;
       const confirm = form.confirm.value;
 
-      // Brauzer tərəfində yoxlamalar. Bunlar yalnız istifadəçiyə kömək üçündür,
-      // çünki hücumçu bu yoxlamaları keçib sorğunu birbaşa göndərə bilər.
-      // Əsl yoxlama backend-də də aparılmalıdır.
+      // Brauzer tərəfində yoxlamalar
       if (username.length < 3 || username.length > 30) {
         showMessage("İstifadəçi adı 3-30 simvol olmalıdır.", "error");
         return;
       }
-      if (password.length < 8) {
-        showMessage("Şifrə ən azı 8 simvol olmalıdır.", "error");
+      if (!checkPassword()) {
+        showMessage("Şifrə yuxarıdakı tələblərin hamısına uyğun olmalıdır.", "error");
+        pwInput.focus();
         return;
       }
       if (password !== confirm) {
@@ -92,6 +175,7 @@
           showMessage("Qeydiyyat uğurludur. Giriş səhifəsinə yönləndirilirsiniz...", "ok");
           setTimeout(() => { window.location.href = "/login.html"; }, 1200);
         } else {
+          // Server də şifrəni yoxlayır: pozulan qaydalar data.message-də gəlir
           showMessage(data.message || data.error || "Qeydiyyat alınmadı. Məlumatları yoxlayın.", "error");
         }
       } catch (err) {

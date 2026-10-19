@@ -5,7 +5,8 @@
 // Üç fənnin kodda harada göründüyü:
 //   Bulud          -> mühit dəyişənləri (process.env), Render + Alwaysdata, proxy ayarı
 //   Kriptoqrafiya  -> bcrypt (duz + hash), təhlükəsiz session cookie, HTTPS
-//   İTİS (ISO 27001) -> audit_logs (loglama), rollar (giriş nəzarəti), rate limit
+//   İTİS (ISO 27001) -> audit_logs (loglama), rollar (giriş nəzarəti),
+//                       şifrə siyasəti, giriş cəhdlərinin məhdudlaşdırılması
 // =====================================================================
 
 // Lokalda .env faylından oxumaq üçün (npm i dotenv). Render-də lazım deyil.
@@ -48,6 +49,8 @@ const pool = mysql.createPool({
 // ---------------------------------------------------------------------
 // 2. AUDİT LOG (ISO/IEC 27001:2022, A.8.15 Logging)
 // Hər təhlükəsizlik hadisəsi audit_logs cədvəlinə yazılır.
+// Hadisələr: REGISTER_SUCCESS, REGISTER_FAILED, LOGIN_SUCCESS, LOGIN_FAILED,
+//            ACCOUNT_BLOCKED, LOGOUT, RATE_LIMITED, ACCESS_DENIED
 // Şifrə heç vaxt loga yazılmır.
 // ---------------------------------------------------------------------
 async function writeLog(userId, username, action, req) {
@@ -74,7 +77,9 @@ async function writeLog(userId, username, action, req) {
 const app = express();
 
 // Render sorğuları öz proxy-si ilə yönləndirir. Bu ayar real istifadəçi IP-sini
-// (req.ip) və HTTPS-i düzgün tanımaq üçündür. IP səhv görünsə, 1 əvəzinə 2 yoxlayın.
+// (req.ip) və HTTPS-i düzgün tanımaq üçündür.
+// DİQQƏT: IP-əsaslı bloklama bu dəyərə güvənir. audit_logs-da bütün IP-lər eyni görünürsə
+// (proxy IP-si), 1 əvəzinə 2 yoxlayın, yoxsa bir istifadəçinin bloklanması hamını bloklaya bilər.
 app.set("trust proxy", 1);
 
 // Helmet: təhlükəsizlik başlıqları (clickjacking, MIME sniffing və s. qarşı)
@@ -86,6 +91,7 @@ app.use(
         // Səhifələrimizdə inline <script> var, ona görə 'unsafe-inline' lazımdır.
         // Təkmilləşdirmə: skriptləri ayrı .js fayllara çıxarıb bunu silmək olar.
         "script-src": ["'self'", "'unsafe-inline'"],
+        // Kitab üz qabıqları Open Library-dən gəlir (archive.org-a yönləndirilə bilir)
         "img-src": ["'self'", "data:", "https://covers.openlibrary.org", "https://archive.org", "https://*.archive.org"],
         // Lokalda (http) bu direktiv CSS-i pozur, ona görə yalnız canlıda aktivdir
         "upgrade-insecure-requests": isProd ? [] : null
@@ -115,20 +121,115 @@ app.use(
 );
 
 // ---------------------------------------------------------------------
-// 4. YARDIMÇI FUNKSİYALAR
+// 4. İSTİFADƏÇİ ADI VƏ ŞİFRƏ SİYASƏTİ (ISO/IEC 27001:2022, A.5.17)
+// Qaydalar register.html-dəki qaydalarla EYNİDİR. Brauzerdəki yoxlama yalnız
+// rahatlıq üçündür, əsl yoxlama burada, serverdə aparılır.
 // ---------------------------------------------------------------------
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,30}$/;
 
-// bcrypt yalnız ilk 72 baytı nəzərə alır, ona görə yuxarı həddi 72 qoyuruq
-function isValidPassword(p) {
-  return typeof p === "string" && p.length >= 8 && Buffer.byteLength(p, "utf8") <= 72;
+// ---- BEGIN PASSWORD POLICY ----
+// Xüsusi simvollar: ! @ # $ % ^ & * ( ) _ + - = [ ] { } ; ' : " \ | , . < > / ? ~ `
+const PASSWORD_RULES = [
+  { re: /^[\x20-\x7E]{8,64}$/, text: "8-64 simvol olmalıdır (yalnız latın hərfləri, rəqəmlər və ASCII simvollar)" },
+  { re: /[a-z]/, text: "ən azı 1 kiçik hərf (a-z)" },
+  { re: /[A-Z]/, text: "ən azı 1 böyük hərf (A-Z)" },
+  { re: /[0-9]/, text: "ən azı 1 rəqəm (0-9)" },
+  { re: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/, text: "ən azı 1 xüsusi simvol (! @ # $ % ^ & * ...)" }
+];
+
+// Şifrə uyğun deyilsə pozulan qaydaların mətnini qaytarır, uyğundursa boş massiv
+function passwordProblems(password) {
+  if (typeof password !== "string") return [PASSWORD_RULES[0].text];
+  return PASSWORD_RULES.filter((rule) => !rule.re.test(password)).map((rule) => rule.text);
 }
+// ---- END PASSWORD POLICY ----
 
 // Mövcud olmayan istifadəçi üçün də bcrypt müqayisəsi aparılır ki,
 // cavab vaxtına görə "belə istifadəçi var/yoxdur" bilinməsin.
 const DUMMY_HASH = bcrypt.hashSync("vaxt-bərabərləşdirmə", BCRYPT_ROUNDS);
 
-// Brute-force qoruması: yalnız UĞURSUZ cəhdlər sayılır (15 dəqiqədə 10)
+// ---------------------------------------------------------------------
+// 5. GİRİŞ CƏHDLƏRİNİN MƏHDUDLAŞDIRILMASI (Brute-force qoruması)
+// Qayda: ardıcıl 3 yanlış şifrə -> həmin IP və həmin istifadəçi adı 5 dəqiqə bloklanır.
+// Sayğaclar iki açar üzrə aparılır: IP ünvanı və istifadəçi adı. Hər hansı biri
+// bloklanıbsa giriş cəhdi qəbul edilmir. İstifadəçi adı olmayan hesablar üçün də
+// eyni qayda işləyir (belə hesabın mövcud olub-olmadığı bilinmir).
+// Diqqət: sayğaclar server yaddaşındadır, server yenidən başlayanda sıfırlanır
+// və yalnız tək server nüsxəsi üçün işləyir (demo üçün kifayətdir).
+// ---------------------------------------------------------------------
+// ---- BEGIN LOCKOUT ----
+const MAX_ATTEMPTS = 3;                    // ardıcıl yanlış cəhd limiti
+const LOCK_MS = 5 * 60 * 1000;             // bloklanma müddəti: 5 dəqiqə
+const FAIL_WINDOW_MS = 15 * 60 * 1000;     // bu müddətdə yeni cəhd olmazsa sayğac sıfırlanır
+
+const attempts = new Map(); // açar -> { count, blockedUntil, lastFail }
+
+function lockKeys(req, username) {
+  const keys = ["ip:" + req.ip];
+  if (username) keys.push("user:" + username.toLowerCase());
+  return keys;
+}
+
+// Açarlardan hər hansı biri bloklanıbsa, qalan millisaniyəni qaytarır (yoxdursa 0)
+function getBlockedMs(keys) {
+  const now = Date.now();
+  let ms = 0;
+  for (const key of keys) {
+    const entry = attempts.get(key);
+    if (entry && entry.blockedUntil > now) ms = Math.max(ms, entry.blockedUntil - now);
+  }
+  return ms;
+}
+
+// Uğursuz cəhdi sayır. Qaytarır: { blocked: bu cəhdlə bloklandımı, remaining: qalan cəhd }
+function registerFailure(keys) {
+  const now = Date.now();
+  let worst = 0;
+  let blocked = false;
+  for (const key of keys) {
+    let entry = attempts.get(key);
+    const blockExpired = entry && entry.blockedUntil && entry.blockedUntil <= now;
+    const stale = entry && now - entry.lastFail > FAIL_WINDOW_MS;
+    if (!entry || blockExpired || stale) entry = { count: 0, blockedUntil: 0, lastFail: now };
+
+    entry.count += 1;
+    entry.lastFail = now;
+    if (entry.count >= MAX_ATTEMPTS) {
+      entry.blockedUntil = now + LOCK_MS;
+      blocked = true;
+    }
+    attempts.set(key, entry);
+    worst = Math.max(worst, entry.count);
+  }
+  return { blocked, remaining: Math.max(MAX_ATTEMPTS - worst, 0) };
+}
+
+// Düzgün giriş olduqda sayğacları sıfırlayır
+function clearFailures(keys) {
+  keys.forEach((key) => attempts.delete(key));
+}
+
+// Köhnəlmiş qeydləri vaxtaşırı təmizləyirik (yaddaş dolmasın)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of attempts) {
+    if (entry.blockedUntil <= now && now - entry.lastFail > FAIL_WINDOW_MS) attempts.delete(key);
+  }
+}, 10 * 60 * 1000).unref();
+// ---- END LOCKOUT ----
+
+// 429 cavabı: neçə dəqiqə qaldığını bildirir
+function sendBlocked(res, ms) {
+  const seconds = Math.ceil(ms / 1000);
+  const minutes = Math.ceil(ms / 60000);
+  res.set("Retry-After", String(seconds));
+  return res.status(429).json({
+    message: "Çox sayda yanlış cəhd. " + minutes + " dəqiqə sonra yenidən cəhd edin.",
+    retryAfterSeconds: seconds
+  });
+}
+
+// Qeydiyyat üçün ümumi limit: yalnız UĞURSUZ sorğular sayılır (15 dəqiqədə 10)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
@@ -142,6 +243,9 @@ const authLimiter = rateLimit({
   }
 });
 
+// ---------------------------------------------------------------------
+// 6. GİRİŞ NƏZARƏTİ (middleware)
+// ---------------------------------------------------------------------
 // Giriş tələb edən səhifələr üçün: giriş yoxdursa login səhifəsinə yönləndirir
 function requirePageLogin(req, res, next) {
   if (req.session.userId) return next();
@@ -159,19 +263,29 @@ async function requireAdmin(req, res, next) {
 }
 
 // ---------------------------------------------------------------------
-// 5. MARŞRUTLAR
+// 7. MARŞRUTLAR
 // ---------------------------------------------------------------------
 
 // ----- Qeydiyyat -----
 app.post("/register", authLimiter, async (req, res) => {
-  const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
-  const password = req.body.password;
+  const body = req.body || {};
+  const username = typeof body.username === "string" ? body.username.trim() : "";
+  const password = body.password;
 
   // Server tərəfində yoxlama (brauzerdəki yoxlamaya etibar etmirik)
-  if (!USERNAME_RE.test(username) || !isValidPassword(password)) {
+  if (!USERNAME_RE.test(username)) {
     await writeLog(null, username, "REGISTER_FAILED", req);
     return res.status(400).json({
-      message: "İstifadəçi adı 3-30 simvol (hərf, rəqəm, _ . -), şifrə isə 8-72 simvol olmalıdır."
+      message: "İstifadəçi adı 3-30 simvol olmalıdır (hərf, rəqəm, _ . - istifadə oluna bilər)."
+    });
+  }
+
+  const problems = passwordProblems(password);
+  if (problems.length > 0) {
+    await writeLog(null, username, "REGISTER_FAILED", req);
+    return res.status(400).json({
+      message: "Şifrə tələblərə uyğun deyil: " + problems.join("; ") + ".",
+      problems
     });
   }
 
@@ -199,9 +313,16 @@ app.post("/register", authLimiter, async (req, res) => {
 });
 
 // ----- Giriş -----
-app.post("/login", authLimiter, async (req, res) => {
-  const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
-  const password = typeof req.body.password === "string" ? req.body.password : "";
+app.post("/login", async (req, res) => {
+  const body = req.body || {};
+  const username = typeof body.username === "string" ? body.username.trim().slice(0, 30) : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  // 1) Bloklanıbsa, şifrəni yoxlamadan 429 qaytarırıq.
+  // Bloklanma zamanı təkrar cəhdlər loga yazılmır (jurnalın dolmasının qarşısını almaq üçün).
+  const keys = lockKeys(req, username);
+  const blockedMs = getBlockedMs(keys);
+  if (blockedMs > 0) return sendBlocked(res, blockedMs);
 
   try {
     const [rows] = await pool.execute(
@@ -213,11 +334,24 @@ app.post("/login", authLimiter, async (req, res) => {
     // İstifadəçi tapılmasa da müqayisə aparılır (vaxt fərqi olmasın)
     const match = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
 
+    // 2) Uğursuz giriş
     if (!user || !match) {
       await writeLog(user ? user.id : null, username, "LOGIN_FAILED", req);
-      // Hər iki halda eyni mesaj: hansının səhv olduğunu hücumçuya bildirmirik
-      return res.status(401).json({ message: "İstifadəçi adı və ya şifrə yanlışdır." });
+
+      const { blocked, remaining } = registerFailure(keys);
+      if (blocked) {
+        await writeLog(user ? user.id : null, username, "ACCOUNT_BLOCKED", req);
+        return sendBlocked(res, LOCK_MS);
+      }
+      // Hər iki halda (yanlış ad / yanlış şifrə) eyni mesaj: hansının səhv olduğunu bildirmirik
+      return res.status(401).json({
+        message: "İstifadəçi adı və ya şifrə yanlışdır. Qalan cəhd: " + remaining,
+        remainingAttempts: remaining
+      });
     }
+
+    // 3) Uğurlu giriş: sayğacları sıfırlayırıq
+    clearFailures(keys);
 
     // Yeni session ID yaradırıq (session fixation hücumuna qarşı)
     req.session.regenerate(async (err) => {
@@ -247,6 +381,12 @@ app.get("/logout", (req, res) => {
   });
 });
 
+// ----- Cari istifadəçi (kataloq səhifəsindəki profil üçün) -----
+app.get("/api/me", (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ message: "Daxil olmamısınız." });
+  res.json({ username: req.session.username, role: req.session.role });
+});
+
 // ----- Audit loglara baxış (yalnız admin) -----
 app.get("/api/audit-logs", requireAdmin, async (req, res) => {
   // limit yoxlanılmış tam ədəddir (1-500), ona görə birbaşa sorğuya yazmaq təhlükəsizdir
@@ -269,11 +409,6 @@ app.get("/bookstore.html", requirePageLogin, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "bookstore.html"));
 });
 
-app.get("/api/me", (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ message: "Daxil olmamısınız." });
-  res.json({ username: req.session.username, role: req.session.role });
-});
-
 // ----- Qalan statik fayllar (index, login, register, style.css) -----
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -287,7 +422,7 @@ app.use((err, req, res, next) => {
 });
 
 // ---------------------------------------------------------------------
-// 6. SERVERİ İŞƏ SALIRIQ (əvvəl bazaya qoşulmanı yoxlayırıq)
+// 8. SERVERİ İŞƏ SALIRIQ (əvvəl bazaya qoşulmanı yoxlayırıq)
 // ---------------------------------------------------------------------
 pool
   .query("SELECT 1")
